@@ -20,7 +20,7 @@ pub fn statusline(short_mode: bool, _show_pr_status: bool) -> String {
 
     // Build model display
     let model_display = if let Some(model) = model {
-        format!("\x1b[38;5;208m{}", model)
+        format!("🧠 \x1b[38;5;208m{}", model)
     } else {
         String::new()
     };
@@ -38,7 +38,7 @@ pub fn statusline(short_mode: bool, _show_pr_status: bool) -> String {
         } else {
             "\x1b[90m"
         };
-        format!("{}{}%\x1b[0m", pct_color, pct)
+        format!("📊 {}{}%\x1b[0m", pct_color, pct)
     };
 
     // Handle non-directory cases
@@ -50,6 +50,13 @@ pub fn statusline(short_mode: bool, _show_pr_status: bool) -> String {
     // Get branch name if in git repo
     let branch = if is_git_repo(current_dir) {
         get_git_branch(current_dir)
+    } else {
+        String::new()
+    };
+
+    // Get git diff line counts for uncommitted changes
+    let git_diff_display = if is_git_repo(current_dir) {
+        get_git_diff_lines(current_dir)
     } else {
         String::new()
     };
@@ -72,7 +79,7 @@ pub fn statusline(short_mode: bool, _show_pr_status: bool) -> String {
 
     // Duration display
     let duration_display = if let Some(duration) = get_session_duration(transcript_path) {
-        format!("\x1b[38;5;245m{}\x1b[0m", duration)
+        format!("⏱️ \x1b[38;5;245m{}\x1b[0m", duration)
     } else {
         String::new()
     };
@@ -103,7 +110,7 @@ pub fn statusline(short_mode: bool, _show_pr_status: bool) -> String {
             } else {
                 "\x1b[31m"  // Red for >= $20.00
             };
-            format!("{}{}\x1b[0m", cost_color, formatted_cost)
+            format!("💰 {}{}\x1b[0m", cost_color, formatted_cost)
         } else {
             String::new()
         }
@@ -137,6 +144,11 @@ pub fn statusline(short_mode: bool, _show_pr_status: bool) -> String {
         components.push(cost_display.clone());
     }
 
+    // Add git diff display to components if available
+    if !git_diff_display.is_empty() {
+        components.push(git_diff_display.clone());
+    }
+
     // Join components with bullet separator
     let components_str = if components.is_empty() {
         String::new()
@@ -147,25 +159,32 @@ pub fn statusline(short_mode: bool, _show_pr_status: bool) -> String {
         )
     };
 
-    // Format final output
+    // Choose appropriate emoji based on context
+    let emoji = if is_git_repo(current_dir) {
+        "⚡" // Lightning bolt for active development
+    } else {
+        "📁" // Folder for non-git directories
+    };
+
+    // Format final output with leading emoji
     if !branch.is_empty() {
         // Git repository case - show branch
         if display_dir.is_empty() {
             format!(
-                "\x1b[32m[{}]\x1b[0m{}",
-                branch, components_str
+                "{} \x1b[32m[{}]\x1b[0m{}",
+                emoji, branch, components_str
             )
         } else {
             format!(
-                "\x1b[36m{}\x1b[0m\x1b[32m[{}]\x1b[0m{}",
-                display_dir, branch, components_str
+                "{} \x1b[36m{}\x1b[0m\x1b[32m[{}]\x1b[0m{}",
+                emoji, display_dir, branch, components_str
             )
         }
     } else {
         // Non-git directory case - just show path with components
         format!(
-            "\x1b[36m{}\x1b[0m{}",
-            display_dir.trim_end(), components_str
+            "{} \x1b[36m{}\x1b[0m{}",
+            emoji, display_dir.trim_end(), components_str
         )
     }
 }
@@ -356,5 +375,39 @@ pub fn format_cost(cost: f64) -> String {
         format!("${:.3}", cost)
     } else {
         format!("${:.2}", cost)
+    }
+}
+
+// Get git diff line counts for uncommitted changes
+pub fn get_git_diff_lines(working_dir: &str) -> String {
+    let output = Command::new("git")
+        .args(["diff", "--numstat"])
+        .current_dir(working_dir)
+        .output();
+
+    let mut added = 0;
+    let mut removed = 0;
+
+    if let Ok(output) = output {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let parts: Vec<&str> = line.split('\t').collect();
+                if parts.len() >= 2 {
+                    if let Ok(add) = parts[0].parse::<u32>() {
+                        added += add;
+                    }
+                    if let Ok(rem) = parts[1].parse::<u32>() {
+                        removed += rem;
+                    }
+                }
+            }
+        }
+    }
+
+    if added > 0 || removed > 0 {
+        format!("📝 \x1b[32m+{}\x1b[0m \x1b[31m-{}\x1b[0m", added, removed)
+    } else {
+        String::new()
     }
 }
