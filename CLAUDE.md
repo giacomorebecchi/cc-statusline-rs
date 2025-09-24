@@ -99,4 +99,3 @@ Expects JSON on stdin with fields:
 - `session_id`: Unique session identifier
 
 The `test.json` file shows the expected input structure for development and testing.
-
